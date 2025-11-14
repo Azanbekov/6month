@@ -2,6 +2,7 @@ from django.db import models
 from users.models import CustomUser
 from common.models import BaseModel
 from common.validators import validate_age
+from django.utils import timezone
 
 class Category(models.Model):
     name = models.CharField(max_length=50)
@@ -13,12 +14,16 @@ class Category(models.Model):
         verbose_name = 'Категория'
         verbose_name_plural = 'Категории'
 
-class Product(BaseModel):
-    title = models.CharField(max_length=50)
+
+class Product(models.Model):
+    title = models.CharField(max_length=50, default="Без названия")
     description = models.TextField(null=True, blank=True)
-    price = models.DecimalField(max_digits=5, decimal_places=2)
-    category = models.ForeignKey(Category, on_delete=models.CASCADE)
-    owner = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
+    price = models.DecimalField(max_digits=10, decimal_places=2)  
+    category = models.ForeignKey(Category, on_delete=models.CASCADE, null=True, blank=True)
+    owner = models.ForeignKey(CustomUser, on_delete=models.CASCADE, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
 
     def save(self, *args, **kwargs):
         if hasattr(self.owner, "jwt_token_payload"):

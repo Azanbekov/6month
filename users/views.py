@@ -13,6 +13,8 @@ import random
 import string
 import requests
 
+from django_redis import get_redis_connection
+
 from .serializers import (
     RegisterValidateSerializer,
     AuthValidateSerializer,
@@ -22,10 +24,8 @@ from .serializers import (
 from users.models import ConfirmationCode, CustomUser
 
 
-
 class CustomTokenObtainPairView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer
-
 
 
 class AuthorizationAPIView(CreateAPIView):
@@ -76,6 +76,9 @@ class RegistrationAPIView(CreateAPIView):
 
             code = ''.join(random.choices(string.digits, k=6))
 
+            redis_conn = get_redis_connection("default")
+            redis_conn.setex(f"confirmation:{user.id}", 300, code)
+
             ConfirmationCode.objects.create(
                 user=user,
                 code=code
@@ -98,6 +101,14 @@ class ConfirmUserAPIView(CreateAPIView):
         serializer.is_valid(raise_exception=True)
 
         user_id = serializer.validated_data['user_id']
+        code = serializer.validated_data['code']
+
+        redis_conn = get_redis_connection("default")
+        key = f"confirmation:{user_id}"
+        stored_code = redis_conn.get(key)
+
+        if not stored_code or stored_code.decode() != code:
+            return Response({"error": "Неверный или просроченный код"}, status=400)
 
         with transaction.atomic():
             user = CustomUser.objects.get(id=user_id)
@@ -106,6 +117,7 @@ class ConfirmUserAPIView(CreateAPIView):
 
             token, _ = Token.objects.get_or_create(user=user)
 
+            redis_conn.delete(key)
             ConfirmationCode.objects.filter(user=user).delete()
 
         return Response(
@@ -116,8 +128,8 @@ class ConfirmUserAPIView(CreateAPIView):
             }
         )
 
-class GoogleAuthAPIView(APIView):
 
+class GoogleAuthAPIView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
@@ -166,4 +178,3 @@ class GoogleAuthAPIView(APIView):
                 "last_login": user.last_login,
             }
         }, status=200)
-

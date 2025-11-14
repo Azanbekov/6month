@@ -1,7 +1,9 @@
 from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from django_redis import get_redis_connection
 from .models import ConfirmationCode, CustomUser
+
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     
@@ -41,6 +43,15 @@ class ConfirmationSerializer(serializers.Serializer):
             user = CustomUser.objects.get(id=user_id)
         except CustomUser.DoesNotExist:
             raise ValidationError('User не существует!')
+
+        redis_conn = get_redis_connection("default")
+        key = f"confirmation:{user_id}"
+        stored_code = redis_conn.get(key)
+
+        if stored_code:
+            if stored_code.decode() != code:
+                raise ValidationError('Неверный код подтверждения!')
+            return attrs
 
         try:
             confirmation_code = ConfirmationCode.objects.get(user=user)
